@@ -99,6 +99,7 @@ func NewContext(opts *ContextOpts) *Context {
 	if par == 0 {
 		par = 10
 	}
+	log.Printf("PAR PAR PAR PAR PAR: %d", par)
 
 	// Setup the variables. We first take the variables given to us.
 	// We then merge in the variables set in the environment.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,42 +60,39 @@ func TestApply(t *testing.T) {
 	}
 }
 
-func TestApply_parallelism1(t *testing.T) {
-	statePath := testTempFile(t)
+func TestApply_parallelism(t *testing.T) {
+	provider := testProvider()
 
-	ui := new(cli.MockUi)
-	p := testProvider()
-	pr := new(terraform.MockResourceProvisioner)
-
-	pr.ApplyFn = func(*terraform.InstanceState, *terraform.ResourceConfig) error {
-		time.Sleep(time.Second)
-		return nil
-	}
-
-	args := []string{
-		"-state", statePath,
-		"-parallelism=1",
-		testFixturePath("parallelism"),
+	var runCount uint64
+	provider.ApplyFn = func(
+		i *terraform.InstanceInfo,
+		s *terraform.InstanceState,
+		d *terraform.InstanceDiff) (*terraform.InstanceState, error) {
+		atomic.AddUint64(&runCount, 1)
+		time.Sleep(5 * time.Second)
+		return nil, nil
 	}
 
 	c := &ApplyCommand{
 		Meta: Meta{
-			ContextOpts: testCtxConfigWithShell(p, pr),
-			Ui:          ui,
+			ContextOpts: testCtxConfig(provider),
+			Ui:          new(cli.MockUi),
 		},
 	}
 
-	start := time.Now()
-	if code := c.Run(args); code != 0 {
-		t.Fatalf("bad: %d\n\n%s", code, ui.ErrorWriter.String())
-	}
-	elapsed := time.Since(start).Seconds()
-
-	// This test should take exactly two seconds, plus some minor amount of execution time.
-	if elapsed < 2 || elapsed > 2.2 {
-		t.Fatalf("bad: %f\n\n%s", elapsed, ui.ErrorWriter.String())
+	par := uint64(5)
+	args := []string{
+		fmt.Sprintf("-parallelism=%d", par),
+		testFixturePath("parallelism"),
 	}
 
+	go c.Run(args)
+	time.Sleep(10000 * time.Millisecond)
+
+	log.Printf("par: %d, runcount addr: %#v", par, &runCount)
+	if rc := atomic.LoadUint64(&runCount); rc != par {
+		t.Fatalf("Expected parallelism: %d, got: %d", par, rc)
+	}
 }
 
 func TestApply_parallelism2(t *testing.T) {
