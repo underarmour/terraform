@@ -119,12 +119,12 @@ func (p *MockResourceProvider) Apply(
 	state *InstanceState,
 	diff *InstanceDiff) (*InstanceState, error) {
 	p.Lock()
-	defer p.Unlock()
-
 	p.ApplyCalled = true
 	p.ApplyInfo = info
 	p.ApplyState = state
 	p.ApplyDiff = diff
+	p.Unlock()
+
 	if p.ApplyFn != nil {
 		return p.ApplyFn(info, state, diff)
 	}
